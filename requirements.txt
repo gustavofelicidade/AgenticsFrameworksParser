@@ -10,3 +10,5 @@ tqdm
 
 tavily-python
 langchain_community
+
+crewai
