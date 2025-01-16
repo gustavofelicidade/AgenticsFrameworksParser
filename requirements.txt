@@ -1,7 +1,7 @@
 langgraph
 langsmith
 langchain_anthropic
-gandalf
 
+matplotlib
 rich
 tqdm
