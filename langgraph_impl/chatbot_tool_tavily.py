@@ -3,6 +3,7 @@ from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langchain_anthropic import ChatAnthropic
+from langchain_community.tools.tavily_search import TavilySearchResults
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from pprint import pprint
@@ -10,11 +11,9 @@ from rich import print
 from rich.pretty import Pretty
 import time
 
-
 # Define o estado do chatbot
 class State(TypedDict):
     messages: Annotated[list, add_messages]
-
 
 # Inicializar o gráfico
 graph_builder = StateGraph(State)
@@ -22,11 +21,9 @@ graph_builder = StateGraph(State)
 # Configuração do modelo LLM
 llm = ChatAnthropic(model="claude-3-5-sonnet-20240620")
 
-
 # Função do chatbot
 def chatbot(state: State):
     return {"messages": [llm.invoke(state["messages"])]}
-
 
 # Adicionar o nó "chatbot"
 graph_builder.add_node("chatbot", chatbot)
@@ -38,6 +35,12 @@ graph_builder.add_edge("chatbot", END)
 # Compilar o gráfico
 graph = graph_builder.compile()
 
+# Configurar a ferramenta Tavily Search
+def configure_tools():
+    tool = TavilySearchResults(max_results=2)
+    return [tool]
+
+tools = configure_tools()
 
 # Visualizar o gráfico com Matplotlib (ASCII)
 def visualize_graph_ascii(graph):
@@ -49,7 +52,6 @@ def visualize_graph_ascii(graph):
     except Exception as e:
         print("Erro ao renderizar o gráfico em ASCII:", e)
 
-
 # Fluxo de mensagens do chatbot
 def stream_graph_updates(user_input: str):
     for event in graph.stream({"messages": [("user", user_input)]}):
@@ -58,6 +60,12 @@ def stream_graph_updates(user_input: str):
             response = value["messages"][-1].content
             print("\n[bold green]Assistant:[/bold green]", response)
 
+# Função para usar a ferramenta Tavily Search
+def use_tool(user_query: str):
+    tool = tools[0]
+    results = tool.invoke(user_query)
+    print("\n[bold yellow]Resultados da busca:[/bold yellow]")
+    pprint(results)
 
 # Exemplo de execução
 if __name__ == "__main__":
@@ -75,13 +83,18 @@ if __name__ == "__main__":
                 print("[bold magenta]Até mais![/bold magenta]")
                 break
 
-            # Simular barra de progresso durante o processamento
-            print("\n[cyan]Processando sua mensagem...[/cyan]")
-            for _ in tqdm(range(10), desc="Progresso", bar_format="{l_bar}{bar} [tempo restante: {remaining}]"):
-                time.sleep(0.1)
+            # # Simular barra de progresso durante o processamento
+            # print("\n[cyan]Processando sua mensagem...[/cyan]")
+            # for _ in tqdm(range(10), desc="Progresso", bar_format="{l_bar}{bar} [tempo restante: {remaining}]"):
+            #     time.sleep(0.1)
 
             # Processar resposta do chatbot
-            stream_graph_updates(user_input)
+            if user_input.lower().startswith("search:"):
+                print("Usando a ferramenta 'search:' ")
+                query = user_input.split("search:", 1)[1].strip()
+                use_tool(query)
+            else:
+                stream_graph_updates(user_input)
         except KeyboardInterrupt:
             print("\n[bold red]Chat encerrado pelo usuário.[/bold red]")
             break

@@ -2,6 +2,11 @@ langgraph
 langsmith
 langchain_anthropic
 
+grandalf
+
 matplotlib
 rich
 tqdm
+
+tavily-python
+langchain_community
