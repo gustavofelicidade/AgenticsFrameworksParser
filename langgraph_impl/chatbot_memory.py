@@ -137,7 +137,7 @@ def visualize_graph_ascii(graph):
 # -----------------------------------------------------------------------------
 # 9) Fluxo de mensagens do chatbot
 # -----------------------------------------------------------------------------
-def stream_graph_updates(user_input: str, thread_id: str = "2"):
+def stream_graph_updates(user_input: str, thread_id: str = "1"):
     """
     Executa o grafo usando thread_id para persistir a memória.
     Cada nó do grafo é executado em sequência; se o chatbot chamar uma ferramenta,
