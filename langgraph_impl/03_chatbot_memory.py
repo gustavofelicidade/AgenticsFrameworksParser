@@ -1,5 +1,5 @@
 """
-chatbot_memory.py
+03_chatbot_memory.py
 =================
 
 Este módulo demonstra como adicionar memória (checkpointing) ao chatbot
@@ -8,7 +8,7 @@ modelo ChatAnthropic. Agora, cada interação do usuário é salva no estado,
 de forma que, ao reutilizar o mesmo thread_id, o contexto do histórico
 de conversas é recuperado e permite um bate-papo multi-turn coerente.
 
-Este script se baseia no 'chatbot_tool_tavily.py' da Parte 2 do tutorial,
+Este script se baseia no '02_chatbot_tool_tavily.py' da Parte 2 do tutorial,
 mas substitui o BasicToolNode e o roteamento manual por ferramentas
 pelas implementações pré-construídas (ToolNode e tools_condition) do
 LangGraph, além de incorporar um checkpointer MemorySaver para persistir

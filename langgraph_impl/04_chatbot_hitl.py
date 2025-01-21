@@ -1,5 +1,5 @@
 """
-chatbot_hitl.py
+04_chatbot_hitl.py
 ================
 
 Este módulo demonstra como introduzir um "humano no circuito" (Human-in-the-Loop, HITL)

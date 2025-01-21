@@ -1,5 +1,5 @@
 """
-chatbot_tool_tavily.py
+02_chatbot_tool_tavily.py
 =======================
 
 Este módulo demonstra um exemplo de implementação de chatbot com LangGraph,
