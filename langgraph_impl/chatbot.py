@@ -3,6 +3,7 @@ from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langchain_anthropic import ChatAnthropic
+from langchain_openai import ChatOpenAI
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from pprint import pprint
@@ -20,8 +21,8 @@ class State(TypedDict):
 graph_builder = StateGraph(State)
 
 # Configuração do modelo LLM
-llm = ChatAnthropic(model="claude-3-5-sonnet-20240620")
-
+# llm = ChatAnthropic(model="claude-3-5-sonnet-20240620")
+llm = ChatOpenAI()
 
 # Função do chatbot
 def chatbot(state: State):

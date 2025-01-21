@@ -26,7 +26,7 @@ Requisitos mínimos:
 
 Autor: Seu Nome
 """
-
+import os
 import time
 import json
 import matplotlib.pyplot as plt
@@ -42,6 +42,8 @@ from rich.console import Console
 # --------------------------------------------------------------------------
 # 1) Importações específicas do LangGraph e da ferramenta Tavily
 # --------------------------------------------------------------------------
+# from langchain_openai import OpenAI
+from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_core.tools import tool
@@ -90,8 +92,12 @@ def human_assistance(query: str) -> str:
 tool_search = TavilySearchResults(max_results=2)
 tools = [tool_search, human_assistance]
 
-llm = ChatAnthropic(model="claude-3-5-sonnet-20240620")
+# llm = ChatAnthropic(model="claude-3-5-sonnet-20240620")
+
+
+llm = ChatOpenAI()
 llm_with_tools = llm.bind_tools(tools)
+
 
 # -----------------------------------------------------------------------------
 # 5) Nó chatbot

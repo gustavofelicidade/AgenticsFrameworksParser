@@ -44,6 +44,7 @@ from langgraph.graph.message import add_messages
 
 # LLM Anthropic + Ferramenta Tavily
 from langchain_anthropic import ChatAnthropic
+from langchain_openai import ChatOpenAI
 from langchain_community.tools.tavily_search import TavilySearchResults
 
 # Import do ToolMessage para encapsular as respostas das ferramentas
@@ -93,7 +94,8 @@ graph_builder = StateGraph(State)
 
 # Configurando o modelo LLM Anthropic.
 # O "bind_tools" permite que este LLM saiba chamar as ferramentas definidas.
-llm = ChatAnthropic(model="claude-3-5-sonnet-20240620")
+# llm = ChatAnthropic(model="claude-3-5-sonnet-20240620")
+llm = ChatOpenAI()
 llm_with_tools = llm.bind_tools(tools)
 
 # -----------------------------------------------------------------------------

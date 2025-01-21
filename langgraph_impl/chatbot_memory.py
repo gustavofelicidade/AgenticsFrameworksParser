@@ -31,6 +31,7 @@ from rich.pretty import Pretty
 # Importações específicas do LangGraph e da ferramenta Tavily
 # --------------------------------------------------------------------------
 from langchain_anthropic import ChatAnthropic
+from langchain_openai import ChatOpenAI
 from langchain_community.tools.tavily_search import TavilySearchResults
 
 # Novo: Import do MemorySaver para manter o histórico (checkpointing)
@@ -71,7 +72,8 @@ tools = [tool]
 
 # O modelo ChatAnthropic que iremos utilizar,
 # vinculado às ferramentas (bind_tools) para permitir tool calls.
-llm = ChatAnthropic(model="claude-3-5-sonnet-20240620")
+# llm = ChatAnthropic(model="claude-3-5-sonnet-20240620")
+llm = ChatOpenAI()
 llm_with_tools = llm.bind_tools(tools)
 
 # -----------------------------------------------------------------------------
