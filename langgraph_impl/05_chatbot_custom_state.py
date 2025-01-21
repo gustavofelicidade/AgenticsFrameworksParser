@@ -2,33 +2,27 @@
 05_chatbot_custom_state.py
 ==========================
 
-Este módulo demonstra como personalizar o estado (State) de um chatbot
-construído com LangGraph, adicionando campos adicionais (por exemplo,
-"name" e "birthday") além da lista de mensagens. Isso permite fluxos mais
-avançados, onde podemos, por exemplo, pedir a validação humana antes de
-armazenar (ou confirmar) tais informações.
+Este módulo demonstra como criar um estado personalizado em nosso chatbot,
+adicionando chaves adicionais (por exemplo, 'name' e 'birthday') ao estado
+para lidar com fluxos de trabalho mais complexos. Assim, informações específicas
+podem ser armazenadas e recuperadas de forma simples em todo o grafo de estados.
 
-Nesta parte 5 do tutorial, aproveitamos o conceito de "human in the loop"
-de maneira que o próprio chatbot, ao encontrar uma possível resposta para
-uma query (por exemplo, uma data de lançamento de um produto), solicite
-confirmação humana antes de atualizar o estado global.
+Nesta versão, introduzimos a ferramenta 'human_assistance' que faz uso de
+``interrupt`` para solicitar revisão humana e, ao aprovar ou corrigir
+as informações, atualiza o estado com um objeto Command.
 
-Utilizamos as seguintes classes e funções centrais:
-- `StateGraph` para a construção do fluxo de nós (chatbot e ferramentas).
-- `MemorySaver` para armazenar o histórico em memória.
-- `ToolNode`, `tool` e `tools_condition` para lidar com as chamadas de ferramenta.
-- `interrupt` para pausar a execução e pedir intervenção humana.
-- `Command` para realizar ações de atualização de estado.
+Também demonstramos como podemos, manualmente, atualizar o estado de qualquer
+chave usando o método ``graph.update_state()``.
 
 Requisitos mínimos:
-- langchain_openai (no lugar de langchain_anthropic, conforme solicitação)
+- langchain_openai (substituindo langchain_anthropic)
+- langgraph (com o módulo checkpoint.memory e prebuilt)
 - langchain_community (para TavilySearchResults)
-- langchain_core (para o decorador tool e tipos auxiliares)
-- langgraph (com o módulo checkpoint.memory, prebuilt, etc.)
-- tqdm, matplotlib, rich, pprint (opcional, para logs e visualização)
+- langchain_core (para o decorador @tool, Command, etc)
+- tqdm, matplotlib, rich, pprint (opcionais, para logs e visualização)
 - (Opcional) grandalf para desenhar o gráfico em ASCII se desejado
 
-Autor: Seu Nome
+
 """
 
 import os
@@ -47,38 +41,38 @@ from rich.console import Console
 # --------------------------------------------------------------------------
 # 1) Importações específicas do LangGraph e da ferramenta Tavily
 # --------------------------------------------------------------------------
-from langchain_openai import ChatOpenAI
+from langchain_openai import ChatOpenAI  # Usando ChatOpenAI (não Anthropic)
 from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_core.messages import ToolMessage
-from langchain_core.tools import (
-    tool,
-    InjectedToolCallId,
-)
-from langgraph.types import Command, interrupt
-from langgraph.graph.message import add_messages
+from langchain_core.tools import InjectedToolCallId, tool
+
+# Novo: Import do MemorySaver para manter histórico em memória
+# e import do interrupt para permitir pausa e retomada,
+# além de Command para atualizar o estado.
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.types import Command, interrupt
+
+# Classes e métodos do LangGraph
 from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
 
 console = Console()
 
 # -----------------------------------------------------------------------------
-# 2) Definição de State, incluindo agora name e birthday
+# 2) Definição de State: agora com 'messages', 'name' e 'birthday'
 # -----------------------------------------------------------------------------
-# Nosso estado carrega a lista de mensagens E campos extras (name, birthday).
-
 class State(TypedDict):
     messages: Annotated[list, add_messages]
     name: str
     birthday: str
 
-# -----------------------------------------------------------------------------
-# 3) Ferramenta de assistência humana com atualização do estado
-# -----------------------------------------------------------------------------
-# Neste caso, solicitamos ao humano que confirme ou corrija "name" e "birthday".
-# Se confirmado, mantemos os valores. Se corrigido, atualizamos a partir do input humano.
-# Retornamos um objeto Command, que instruirá o LangGraph a atualizar o estado.
+# Criamos o builder do grafo com nossa nova definição de estado
+graph_builder = StateGraph(State)
 
+# -----------------------------------------------------------------------------
+# 3) Ferramenta de assistência humana com atualização de estado
+# -----------------------------------------------------------------------------
 @tool
 def human_assistance(
     name: str,
@@ -86,66 +80,67 @@ def human_assistance(
     tool_call_id: Annotated[str, InjectedToolCallId]
 ) -> str:
     """
-    Solicita assistência de um humano para verificar/corrigir informações.
-    A execução é interrompida até que o humano insira se está correto (sim/não)
-    e, se necessário, forneça correções.
+    Solicita assistência de um humano para revisar as informações fornecidas.
+    Faz uso de interrupt() para pausar a execução até que o humano responda.
+    Em seguida, retorna um Command que atualiza o estado com os dados
+    revisados ou confirmados.
     """
     human_response = interrupt(
         {
-            "question": "Está correto?",
+            "question": "Esta informação está correta?",
             "name": name,
             "birthday": birthday,
         }
     )
-    # Verifica a resposta do humano
-    if human_response.get("correct", "").lower().startswith("s"):  # s ou sim
+    # Se o humano disser que está correto, mantemos as informações.
+    if human_response.get("correct", "").lower().startswith("s"):
         verified_name = name
         verified_birthday = birthday
-        response = "Informação confirmada pelo humano."
+        response = "Informações confirmadas pelo revisor humano."
     else:
-        # Se o humano corrigir, usamos as informações fornecidas
+        # Caso contrário, aceitamos as correções feitas pelo humano
         verified_name = human_response.get("name", name)
         verified_birthday = human_response.get("birthday", birthday)
-        response = f"Informação corrigida: {human_response}"
+        response = f"Revisor humano fez uma correção: {human_response}"
 
-    # Construímos o dicionário que será usado para atualizar o estado
+    # Construímos o objeto de atualização de estado
     state_update = {
         "name": verified_name,
         "birthday": verified_birthday,
-        # Registramos a mensagem da ferramenta (ToolMessage) no histórico
         "messages": [ToolMessage(response, tool_call_id=tool_call_id)],
     }
 
-    # Retornamos um Command com update, para LangGraph atualizar o estado
+    # Retornamos um Command para atualizar o estado dentro do próprio tool
     return Command(update=state_update)
 
 # -----------------------------------------------------------------------------
-# 4) Configuração do LLM e demais ferramentas
+# 4) Configuração do LLM e das demais ferramentas
 # -----------------------------------------------------------------------------
 tool_search = TavilySearchResults(max_results=2)
 tools = [tool_search, human_assistance]
 
-llm = ChatOpenAI(model_name="gpt-3.5-turbo")
+llm = ChatOpenAI()  # Substituindo ChatAnthropic por ChatOpenAI
 llm_with_tools = llm.bind_tools(tools)
 
 # -----------------------------------------------------------------------------
-# 5) Nó chatbot (função principal de inferência)
+# 5) Nó chatbot
 # -----------------------------------------------------------------------------
+# Aqui adicionamos um 'assert' para garantir que o LLM não faça múltiplas
+# chamadas de ferramenta em paralelo, o que complicaria a retomada.
 def chatbot(state: State):
     """
     Nó principal do chatbot, que chama o llm_with_tools.
-    Verifica se há apenas 0 ou 1 chamadas de ferramenta (para simplificar).
+    Se houver chamadas de ferramenta, o fluxo seguirá para o ToolNode.
     """
     message = llm_with_tools.invoke(state["messages"])
-    assert len(message.tool_calls) <= 1, "Mais de uma chamada de ferramenta detectada!"
+    assert len(message.tool_calls) <= 1, "Múltiplas tool_calls detectadas!"
     return {"messages": [message]}
 
-# -----------------------------------------------------------------------------
-# 6) Construção do Grafo (StateGraph)
-# -----------------------------------------------------------------------------
-graph_builder = StateGraph(State)
 graph_builder.add_node("chatbot", chatbot)
 
+# -----------------------------------------------------------------------------
+# 6) Nó de ferramentas (ToolNode)
+# -----------------------------------------------------------------------------
 tool_node = ToolNode(tools=tools)
 graph_builder.add_node("tools", tool_node)
 
@@ -154,79 +149,106 @@ graph_builder.add_node("tools", tool_node)
 # -----------------------------------------------------------------------------
 graph_builder.add_conditional_edges("chatbot", tools_condition)
 graph_builder.add_edge("tools", "chatbot")
+# O fluxo começa no "chatbot"
 graph_builder.add_edge(START, "chatbot")
 
 # -----------------------------------------------------------------------------
-# 8) Checkpointer e compilação do Grafo
+# 8) Configuração do checkpointer e compilação (sem interrupção específica aqui)
 # -----------------------------------------------------------------------------
 memory = MemorySaver()
-graph = graph_builder.compile(checkpointer=memory)
+graph = graph_builder.compile(
+    checkpointer=memory
+)
 
 # -----------------------------------------------------------------------------
-# 9) Exemplo de uso e fluxo de execução
+# 9) Função opcional de visualização do gráfico em ASCII
 # -----------------------------------------------------------------------------
-def run_example():
+def visualize_graph_ascii(graph):
     """
-    Função de demonstração:
-    1) Usuário pergunta sobre a data de lançamento do LangGraph.
-    2) O chatbot fará busca via TavilySearchResults.
-    3) Em seguida, tenta preencher 'name' e 'birthday' e chama human_assistance.
-    4) Interrompe para revisão humana (interrupt).
-    5) Humano confirma ou corrige (resumimos com um Command).
-    6) Estado final reflete os campos name e birthday confirmados/corrigidos.
+    Tenta renderizar o gráfico em formato ASCII e imprimir no console.
+    Pode falhar caso não haja suporte local ou dependências de visualização.
     """
-    user_input = (
-        "Você pode descobrir quando o LangGraph foi lançado? "
-        "Ao obter a resposta, use a ferramenta 'human_assistance' para revisão."
-    )
+    try:
+        ascii_graph = graph.get_graph().draw_ascii()
+        print("\n[bold blue]Gráfico do Chatbot (Formato ASCII):[/bold blue]")
+        print(ascii_graph)
+    except Exception as e:
+        print("Erro ao renderizar o gráfico em ASCII:", e)
 
-    config = {"configurable": {"thread_id": "demo_custom_state"}}
+# -----------------------------------------------------------------------------
+# 10) Função de fluxo de mensagens, lidando com tool_calls
+# -----------------------------------------------------------------------------
+def stream_graph_updates(user_input: str, thread_id: str = "1"):
+    """
+    Executa o grafo usando thread_id para persistir a memória.
+    Se houver tool_calls, o fluxo seguirá automaticamente para o nó de ferramentas.
+    """
+    config = {"configurable": {"thread_id": thread_id}}
 
-    # Disparamos o fluxo inicial
-    console.print("\n[bold cyan]=== Iniciando fluxo de chatbot ===[/bold cyan]")
-    events = graph.stream(
-        {"messages": [{"role": "user", "content": user_input}]},
-        config=config,
-        stream_mode="values"
-    )
+    events = graph.stream({"messages": [{"role": "user", "content": user_input}]},
+                          config=config,
+                          stream_mode="values")
 
-    # Exibimos as mensagens geradas até o ponto de interrupção (ou final)
     for event in events:
         if "messages" in event:
-            event["messages"][-1].pretty_print()
+            last_msg = event["messages"][-1]
+            # Verifica se a mensagem tem role ou type
+            msg_role = getattr(last_msg, "role", None) or getattr(last_msg, "type", None)
+            msg_content = last_msg.content
 
-    console.print("\n[bold yellow]=== Interrupção para revisão humana! ===[/bold yellow]")
-    console.print("[dim]Simulando a correção...[/dim]")
-
-    # Simulando uma correção manual do humano
-    # Exemplo: o humano diz "não está correto" e corrige para
-    # name=LangGraph, birthday=17 de Janeiro de 2024
-    human_command = Command(
-        resume={
-            "correct": "nao",
-            "name": "LangGraph",
-            "birthday": "17 de Janeiro de 2024"
-        }
-    )
-
-    # Retomamos o fluxo após a interrupção com o 'human_command'
-    events2 = graph.stream(human_command, config=config, stream_mode="values")
-    for event in events2:
-        if "messages" in event:
-            event["messages"][-1].pretty_print()
-
-    # Ao final, verificamos o estado persistido
-    snapshot = graph.get_state(config)
-    final_name = snapshot.values.get("name", "")
-    final_birthday = snapshot.values.get("birthday", "")
-    console.print(f"\n[bold green]Estado Final:[/bold green] name={final_name}, birthday={final_birthday}\n")
+            if msg_role == "assistant":
+                console.print(f"\n[green]Assistant:[/green] {msg_content}", style="bold")
+            elif msg_role == "tool":
+                console.print(f"[magenta]Tool Message:[/magenta] {msg_content}", style="bold")
+            elif msg_role == "user":
+                console.print(f"\n[yellow]User:[/yellow] {msg_content}", style="bold")
+            else:
+                console.print(f"\n[bold]{msg_role or 'unknown'}:[/bold] {msg_content}")
 
 # -----------------------------------------------------------------------------
-# 10) Execução principal (main)
+# 11) Demonstração de uso: manual update e fluxo
 # -----------------------------------------------------------------------------
 if __name__ == "__main__":
-    """
-    Executa a demonstração de personalização do estado, criando um fluxo que
-    pesquisa a data de lançamento de LangGraph e pede revisão humana.
-    """
-    run_example()
+    # (Opcional) Visualizar o grafo em ASCII
+    visualize_graph_ascii(graph)
+
+    console.print("\n[bold cyan]Chatbot com Estado Personalizado![/bold cyan]")
+    console.print("[yellow]Digite 'quit', 'exit' ou 'q' para sair.\n[/yellow]")
+
+    # Exemplo rápido de interação
+    while True:
+        try:
+            user_input = input("[bold blue]User:[/bold blue] ").strip()
+            if user_input.lower() in ["quit", "exit", "q"]:
+                console.print("[bold magenta]Até mais![/bold magenta]")
+                break
+
+            # Enviamos a pergunta do usuário pelo grafo
+            stream_graph_updates(user_input, thread_id="1")
+
+            # Exemplo de como obter o snapshot do estado
+            config = {"configurable": {"thread_id": "1"}}
+            snapshot = graph.get_state(config)
+            console.print("\n[dim]Estado atual (parcial):[/dim]")
+            partial_state = {k: v for k, v in snapshot.values.items()
+                             if k in ("name", "birthday")}
+            pprint(partial_state)
+
+            # Exemplo de como atualizar manualmente o estado
+            console.print("\n[white]Deseja alterar manualmente o valor 'name'? (s/n)[/white]")
+            choice = input("> ").strip().lower()
+            if choice.startswith("s"):
+                new_name = input("[white]Insira o novo valor para 'name':[/white] ")
+                graph.update_state(config, {"name": new_name})
+                console.print(f"[green]Estado atualizado com sucesso![/green]")
+                # Verificando
+                snapshot = graph.get_state(config)
+                partial_state = {k: v for k, v in snapshot.values.items()
+                                 if k in ("name", "birthday")}
+                pprint(partial_state)
+
+        except KeyboardInterrupt:
+            console.print("\n[bold red]Chat encerrado pelo usuário.[/bold red]")
+            break
+        except Exception as e:
+            console.print(f"\n[bold red]Erro inesperado:[/bold red] {e}")
